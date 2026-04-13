@@ -6,9 +6,9 @@ to prevent corruption if two processes run simultaneously.
 """
 
 import enum
-import fcntl
 import json
 import os
+import tempfile
 from datetime import datetime, timezone
 
 
@@ -64,15 +64,26 @@ def load_state(path: str) -> dict:
 
 
 def save_state(path: str, state: dict) -> None:
-    """Atomically write the state dict to disk with exclusive locking."""
-    tmp = path + ".tmp"
-    with open(tmp, "w") as f:
-        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-        json.dump(state, f, indent=2)
-        f.write("\n")
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp, path)  # atomic rename
+    """Atomically write the state dict to disk.
+
+    Each call creates a unique temp file so that concurrent calls from the
+    upload and download threads never collide on the same path.
+    """
+    dir_name = os.path.dirname(os.path.abspath(path))
+    fd, tmp = tempfile.mkstemp(dir=dir_name, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(state, f, indent=2)
+            f.write("\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)  # atomic rename
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def update_file_status(

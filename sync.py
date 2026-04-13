@@ -151,17 +151,26 @@ def ensure_work_dirs(work_dir: Path) -> None:
 def discover_files(remote_path: str) -> list[dict]:
     """List Takeout archive files at the given rclone path."""
     log.info("Listing files at %s ...", remote_path)
-    result = run_cmd(
-        ["rclone", "lsjson", "--no-modtime", remote_path],
-        description=f"list {remote_path}",
-        timeout=120,
-    )
+    try:
+        result = run_cmd(
+            ["rclone", "lsjson", "--no-modtime", remote_path],
+            description=f"list {remote_path}",
+            timeout=120,
+        )
+    except RuntimeError:
+        remote_name = remote_path.split(":")[0] if ":" in remote_path else remote_path
+        log.error("Could not list files at '%s'.", remote_path)
+        log.error("Troubleshooting:")
+        log.error("  1. List your top-level folders:  rclone lsd %s:", remote_name)
+        log.error("  2. Search for archive files:     rclone lsf --include '*.zip' --include '*.tgz' -R %s:", remote_name)
+        log.error("  3. If the folder is shared with you, reconfigure with --drive-shared-with-me")
+        sys.exit(1)
     entries: list[dict] = json.loads(result.stdout)
     archives = [
         e for e in entries
         if not e.get("IsDir", False)
-        and Path(e["Name"]).suffix.lower() in (".zip", ".tgz")
-        or e["Name"].endswith(".tar.gz")
+        and (Path(e["Name"]).suffix.lower() in (".zip", ".tgz")
+             or e["Name"].endswith(".tar.gz"))
     ]
     log.info("Found %d archive(s)", len(archives))
     return [{"name": e["Name"], "Size": e.get("Size")} for e in archives]
