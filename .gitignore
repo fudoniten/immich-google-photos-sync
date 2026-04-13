@@ -1,0 +1,15 @@
+# Working directories created by the sync pipeline
+work/
+
+# State and log files (machine-specific, not committed)
+sync-state.json
+sync-state.json.tmp
+
+# Nix build outputs
+result
+result-*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
